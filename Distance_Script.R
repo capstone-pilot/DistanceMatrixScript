@@ -3,17 +3,27 @@ if(!require(geosphere)){
   install.packages("geosphere")
   require(geosphere)
 }
+if(!require(stringr)){
+  install.packages("stringr")
+  require(stringr)
+}
+
+
 #Set working directory where files exist
 setwd("~/Desktop/Pilot/Data")
 #Main locations file
-PFJ <- read.csv("Master_PFJ_US_Locations.csv")
+PFJ <- read.csv("./Pilot_Updated/Master_PFJ_US_Locations_Aggregated.csv")
+#List of Travel Centers
+travelCenters <- read.csv("./Pilot_Updated/Location_To_Opis.csv")
 #Incomplete list of competitors
 competitor <- read.csv("Matt_Price_Competitor_List.csv")
-
 #Subset data frames to useful information
-DF1_Dist <- unique(PFJ[,c(1,7,8,10,11)])
+PFJ_Unique <- unique(PFJ[,c(1,25,26)])
+PFJ_Idx <- which(PFJ_Unique$location_id%in%travelCenters$LOCATION_ID)
+
+DF1_Dist <- PFJ_Unique[PFJ_Idx,]
 numDF1 <- nrow(DF1_Dist)
-DF1_Dist$STATION_NAME<- paste0(rep("PFJ_", numDF1), DF1_Dist$LOCATION_ID)
+DF1_Dist$STATION_NAME<- paste0(rep("PFJ_", numDF1), DF1_Dist$location_id)
 
 ##Begin Data Cleaning
 
@@ -25,12 +35,11 @@ competitor$Longitude <- round(competitor$Longitude, 4)
 competitor$Latitude <- round(competitor$Latitude, 4)
 
 #Standardize PFJ names
-temp <- c()
-comp_Idx <- which(substring(competitor$Station.Name,1,5)!="PILOT")
-numDF2 <- length(comp_Idx)
+anti_comp_Idx <- which(competitor$OPIS.ID%in%travelCenters$OPIS_TRUCKSTOP_ID)
 
 #Subset Competitors dataset
-DF2_Dist <- competitor[comp_Idx,c(1,4:7)]
+DF2_Dist <- competitor[-anti_comp_Idx,c(1,6,7)]
+numDF2 <- nrow(DF2_Dist)
 DF2_Dist <- cbind(DF2_Dist,"STATION_NAME"=paste0(rep("COMP_",numDF2), DF2_Dist$OPIS.ID))
 
 #Match column names for join
@@ -77,16 +86,13 @@ Sys.time()-start
 compMatrix <- (compMatrix*3.28084)/5280
 PFJMatrix <- (PFJMatrix*3.28084)/5280
 
-fileName1 <- paste0(getwd(),"/PFJ_Matrix.csv")
-fileName2 <- paste0(getwd(),"/Competitor_Matrix.csv")
-write.csv(PFJMatrix, file = fileName1)
-write.csv(compMatrix, file = fileName2)
-
 ###---------------------------------------READ IN MATRICES---------------------------------------------###
-PFJ_Matrix_Source <- read.csv(paste0(getwd(),"/PFJ_Matrix.csv"))
-Comp_Matrix_Source <-  read.csv(paste0(getwd(),"/Competitor_Matrix.csv"))
+# PFJ_Matrix_Source <- read.csv(paste0(getwd(),"/PFJ_Matrix.csv"))
+# Comp_Matrix_Source <-  read.csv(paste0(getwd(),"/Competitor_Matrix.csv"))
 
 ##-------------------------PFJ Distance----------------------------##
+PFJ_Matrix_Source <- PFJMatrix
+Comp_Matrix_Source <- compMatrix
 
 start=Sys.time()
 PFJ_OneMile <- numeric()
@@ -94,10 +100,11 @@ PFJ_FiveMile <- numeric()
 PFJ_FifteenMile <- numeric()
 PFJ_MinDist <- numeric()
 for(i in 1:nrow(PFJ_Matrix_Source)){
-  PFJ_OneMile[i] <- sum(ifelse( !is.na(PFJ_Matrix_Source[i,-1]) & (PFJ_Matrix_Source[i,-1]>0) & (PFJ_Matrix_Source[i,-1]<1) ,1,0))
-  PFJ_FiveMile[i] <- sum(ifelse( !is.na(PFJ_Matrix_Source[i,-1]) & (PFJ_Matrix_Source[i,-1]>=1) & (PFJ_Matrix_Source[i,-1]<5),1,0 ))
-  PFJ_FifteenMile[i] <- sum(ifelse( !is.na(PFJ_Matrix_Source[i,-1]) & (PFJ_Matrix_Source[i,-1]>=5) & (PFJ_Matrix_Source[i,-1]<15),1,0 ))
-  PFJ_MinDist[i] <- min(PFJ_Matrix_Source[i,-1], na.rm = TRUE)
+  PFJ_OneMile[i] <- sum(ifelse( !is.na(PFJ_Matrix_Source[i,]) & (PFJ_Matrix_Source[i,]>0) & (PFJ_Matrix_Source[i,]<1) ,1,0))
+  PFJ_FiveMile[i] <- sum(ifelse( !is.na(PFJ_Matrix_Source[i,]) & (PFJ_Matrix_Source[i,]>=1) & (PFJ_Matrix_Source[i,]<5),1,0 ))
+  PFJ_FifteenMile[i] <- sum(ifelse( !is.na(PFJ_Matrix_Source[i,]) & (PFJ_Matrix_Source[i,]>=5) & (PFJ_Matrix_Source[i,]<15),1,0 ))
+  PFJ_MinDist[i] <- min(PFJ_Matrix_Source[i,], na.rm = TRUE)
+  PFJ_Matrix_Source[i,i] <- ifelse(is.na(PFJ_Matrix_Source[i,i]),0,PFJ_Matrix_Source[i,i])
 }
 Sys.time()-start
 
@@ -109,21 +116,22 @@ Comp_FiveMile <- numeric()
 Comp_FifteenMile <- numeric()
 Comp_MinDist <- numeric()
 for(i in 1:nrow(Comp_Matrix_Source)){
-  Comp_OneMile[i] <- sum(ifelse( !is.na(Comp_Matrix_Source[i,-1]) & (Comp_Matrix_Source[i,-1]>0) & (Comp_Matrix_Source[i,-1]<1) ,1,0))
-  Comp_FiveMile[i] <- sum(ifelse( !is.na(Comp_Matrix_Source[i,-1]) & (Comp_Matrix_Source[i,-1]>=1) & (Comp_Matrix_Source[i,-1]<5),1,0 ))
-  Comp_FifteenMile[i] <- sum(ifelse( !is.na(Comp_Matrix_Source[i,-1]) & (Comp_Matrix_Source[i,-1]>=5) & (Comp_Matrix_Source[i,-1]<15),1,0 ))
-  Comp_MinDist[i] <- min(Comp_Matrix_Source[i,-1], na.rm = TRUE)
+  Comp_OneMile[i] <- sum(ifelse( !is.na(Comp_Matrix_Source[i,]) & (Comp_Matrix_Source[i,]>0) & (Comp_Matrix_Source[i,]<1) ,1,0))
+  Comp_FiveMile[i] <- sum(ifelse( !is.na(Comp_Matrix_Source[i,]) & (Comp_Matrix_Source[i,]>=1) & (Comp_Matrix_Source[i,]<5),1,0 ))
+  Comp_FifteenMile[i] <- sum(ifelse( !is.na(Comp_Matrix_Source[i,]) & (Comp_Matrix_Source[i,]>=5) & (Comp_Matrix_Source[i,]<15),1,0 ))
+  Comp_MinDist[i] <- min(Comp_Matrix_Source[i,], na.rm = TRUE)
+  Comp_Matrix_Source[i,i] <- ifelse(is.na(Comp_Matrix_Source[i,i]),0,Comp_Matrix_Source[i,i])
+  print(paste0( (i/nrow(Comp_Matrix_Source))*100, "%" ))
 }
 Sys.time()-start
 
+PFJ_Matrix_Source <- cbind(PFJ_Matrix_Source, PFJ_OneMile, PFJ_FiveMile, PFJ_FifteenMile, PFJ_MinDist)
+Comp_Matrix_Source <- cbind(Comp_Matrix_Source, Comp_OneMile, Comp_FiveMile, Comp_FifteenMile, Comp_MinDist)
 
-
-
-
-
-
-
-
+fileName1 <- paste0(getwd(),"/PFJ_Matrix.csv")
+fileName2 <- paste0(getwd(),"/Competitor_Matrix.csv")
+write.csv(PFJ_Matrix_Source, file = fileName1)
+write.csv(Comp_Matrix_Source, file = fileName2)
 #-------------------------------------------BitRot-----------------------------------------------#
 #pilotTest <- Pilot_Idx[c(8,57,70,97,195,275,329,335,341,349,350,447,476)]
 
